@@ -1,0 +1,20 @@
+{
+  "name": "overcooked-agents",
+  "version": "0.1.0",
+  "description": "An Overcooked-inspired 3D kitchen that visualizes live GitHub Copilot agent activity on your machine.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "agent-kitchen": "server/index.js"
+  },
+  "scripts": {
+    "start": "node server/index.js --open",
+    "serve": "node server/index.js",
+    "demo": "node server/index.js --open --demo",
+    "test": "node --test \"test/*.test.js\"",
+    "screenshots": "node scripts/screenshots.js"
+  }
+}

@@ -22,7 +22,9 @@ export class StationProp {
     this.group = new THREE.Group();
     this.group.position.set(w.x, 0, w.z);
     this.group.rotation.y = def.facing + Math.PI;
-    this.anchor = new THREE.Vector3(w.x, TOP_Y + 0.95, w.z);
+    this.anchor = new THREE.Vector3(w.x, TOP_Y + 0.75, w.z);
+    // Chef stands behind island stations (seen from the camera): float the bar a bit toward the viewer.
+    if (Math.abs(def.facing) < 0.01) this.anchor.z += 0.32;
     this.labelAnchor = new THREE.Vector3(w.x, 0.35, w.z);
     this.users = new Set();
     this.activity = 0;
@@ -86,7 +88,9 @@ export class StationProp {
       return m;
     };
     g.add(cone(0.24, 0.8, '#ff4d1a', 0, 0), cone(0.17, 0.62, '#ff8f26', 0.15, 0.08), cone(0.16, 0.58, '#ff8f26', -0.15, -0.06), cone(0.11, 0.42, '#ffd23f', 0.03, 0.12), cone(0.1, 0.36, '#ffd23f', -0.06, -0.1));
-    g.position.set(0, (this.topStyle === 'none' ? 0.9 : TOP_Y + 0.12), 0);
+    const raised = { steel: 0.22, stove: 0.3, ceramic: 0.08, none: 0 }[this.topStyle] ?? 0.1;
+    g.position.set(0, this.topStyle === 'none' ? 0.9 : TOP_Y + raised, 0);
+    g.scale.setScalar(1.35);
     g.visible = false;
     this.group.add(g);
     return g;
@@ -107,7 +111,7 @@ export class StationProp {
       const on = Boolean(this.fire && this.fire.severity === 'fire' && t < this.fire.until);
       this.flames.visible = on;
       if (on) {
-        const grow = Math.min(1, (t - this.fire.start) * 3) * Math.min(1, (this.fire.until - t) * 1.5);
+        const grow = 1.35 * Math.min(1, (t - this.fire.start) * 3) * Math.min(1, (this.fire.until - t) * 1.5);
         this.flames.children.forEach((c, i) => {
           c.scale.set(grow * (1 + Math.cos(t * 17 + i * 2) * 0.12), grow * (1 + Math.sin(t * 21 + i * 1.3) * 0.22), grow * (1 + Math.sin(t * 15 + i) * 0.12));
         });

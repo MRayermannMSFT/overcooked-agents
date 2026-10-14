@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   STATIONS, STATION_BY_ID, classifyShell, classifyTool, patchFiles, shortPath, splitShellSegments, truncate,
-} from '../shared/stations.js';
+} from '../public/shared/stations.js';
 
 test('catalog has unique ids and every station is described', () => {
   const ids = STATIONS.map((s) => s.id);

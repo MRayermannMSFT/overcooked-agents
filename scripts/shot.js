@@ -135,8 +135,10 @@ export async function openBrowser({ width = 1600, height = 900 } = {}) {
       if (r.exceptionDetails) throw new Error(`eval failed: ${r.exceptionDetails.exception?.description || r.exceptionDetails.text}`);
       return r.result.value;
     },
-    async screenshot(out) {
-      const { data } = await send('Page.captureScreenshot', { format: 'png' });
+    async screenshot(out, clip = null) {
+      const params = { format: 'png' };
+      if (clip) params.clip = { x: clip.x, y: clip.y, width: clip.width, height: clip.height, scale: clip.scale || 1 };
+      const { data } = await send('Page.captureScreenshot', params);
       fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
       fs.writeFileSync(out, Buffer.from(data, 'base64'));
       return out;

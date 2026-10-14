@@ -130,8 +130,8 @@ const I = {
     ['M12 10.4c1 2.1 3 2.8 3 5.1a3 3 0 0 1-6 0c0-2 2-3 3-5.1z', '#ffd54f'],
   ],
   hat: [
-    ['M6 11.5a3.8 3.8 0 0 1 2.6-6.6 4 4 0 0 1 6.8 0 3.8 3.8 0 0 1 2.6 6.6V15H6z', '#ffffff'],
-    ['M6 15h12v4.2H6z', '#e3e8ec'],
+    ['M6 11.5a3.8 3.8 0 0 1 2.6-6.6 4 4 0 0 1 6.8 0 3.8 3.8 0 0 1 2.6 6.6V15H6z', '#ffffff', '#3b2a20', 1.4],
+    ['M6 15h12v4.2H6z', '#e3e8ec', '#3b2a20', 1.4],
   ],
   check: [['M4 12.5l5 5L20 6.5', null, '#2e7d32', 3]],
   cross: [['M6 6l12 12M18 6 6 18', null, '#c62828', 3]],
@@ -182,9 +182,9 @@ export function drawIcon(ctx, name, x, y, size) {
 /** The dish on an order ticket "levels up" as the order moves through the SDLC. */
 export function dishFor(stations = []) {
   const has = (s) => stations.includes(s);
-  if (has('ship')) return { icon: 'omakase', name: 'Omakase Set' };
+  if (has('ship')) return { icon: 'omakase', name: 'Omakase' };
   if (has('commit')) return { icon: 'bento', name: 'Bento Box' };
-  if (has('test')) return { icon: 'tempura', name: 'Tempura Roll' };
+  if (has('test')) return { icon: 'tempura', name: 'Tempura' };
   if (has('build')) return { icon: 'maki', name: 'Maki Roll' };
   if (has('code')) return { icon: 'knife', name: 'Sashimi' };
   if (stations.length) return { icon: 'soup', name: 'Miso Soup' };

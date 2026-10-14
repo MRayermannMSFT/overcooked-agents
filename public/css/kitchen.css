@@ -1,6 +1,6 @@
-@font-face { font-family: 'Fredoka'; src: url('/fonts/fredoka-latin-500-normal.woff2') format('woff2'); font-weight: 500; font-display: swap; }
-@font-face { font-family: 'Fredoka'; src: url('/fonts/fredoka-latin-600-normal.woff2') format('woff2'); font-weight: 600; font-display: swap; }
-@font-face { font-family: 'Fredoka'; src: url('/fonts/fredoka-latin-700-normal.woff2') format('woff2'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Fredoka'; src: url('../fonts/fredoka-latin-500-normal.woff2') format('woff2'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Fredoka'; src: url('../fonts/fredoka-latin-600-normal.woff2') format('woff2'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Fredoka'; src: url('../fonts/fredoka-latin-700-normal.woff2') format('woff2'); font-weight: 700; font-display: swap; }
 
 :root {
   --ink: #3b2a20;
@@ -194,7 +194,7 @@ button { font-family: inherit; }
 .tick.fade { opacity: 0; }
 
 .roster {
-  position: absolute; top: 150px; bottom: 140px; right: -390px; width: 370px;
+  position: absolute; top: 182px; bottom: 140px; right: -390px; width: 370px;
   display: flex; flex-direction: column; overflow: hidden;
   background: var(--paper); border: 3px solid var(--ink); border-radius: 16px; box-shadow: 0 6px 0 rgba(59, 42, 32, 0.35);
   transition: right 0.35s cubic-bezier(0.2, 1.2, 0.4, 1);
@@ -264,7 +264,7 @@ button { font-family: inherit; }
 kbd { padding: 0 5px; border: 2px solid var(--ink-soft); border-bottom-width: 3px; border-radius: 5px; font: 700 11px var(--font); color: var(--ink); background: #fff; }
 
 .popover.settings {
-  position: absolute; top: 140px; right: 14px; width: 310px; z-index: 40; padding: 10px 14px 14px;
+  position: absolute; top: 172px; right: 14px; width: 310px; z-index: 40; padding: 10px 14px 14px;
   background: var(--paper); border: 3px solid var(--ink); border-radius: 14px; box-shadow: 0 6px 0 rgba(59, 42, 32, 0.35);
 }
 .settings h3 { margin: 4px 0 6px; font: 700 18px var(--font); }

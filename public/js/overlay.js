@@ -1,5 +1,5 @@
 import { THREE } from './scene/world.js';
-import { STATION_BY_ID } from '/shared/stations.js';
+import { STATION_BY_ID } from '../shared/stations.js';
 import { stationIconSvg, iconSvg } from './icons.js';
 
 const el = (cls, html = '') => {
@@ -113,6 +113,7 @@ export class Overlay {
     // Chef name tags, speech bubbles and emotes.
     const live = new Set();
     const placed = [];
+    const talkers = new Set([...this.director.entities.values()].filter((e) => e.say).sort((a, b) => b.say.until - a.say.until).slice(0, 2).map((e) => e.key));
     for (const e of this.director.entities.values()) {
       live.add(e.key);
       let rec = this.chefEls.get(e.key);
@@ -141,7 +142,7 @@ export class Overlay {
       rec.tag.title = act.text;
 
       const chatter = this.settings.chatter && !this.settings.privacy;
-      const bubbleText = chatter && e.say ? e.say.text : '';
+      const bubbleText = chatter && e.say && talkers.has(e.key) ? e.say.text : '';
       if (rec.last.bubble !== bubbleText) {
         rec.bubble.textContent = bubbleText;
         rec.bubble.style.display = bubbleText ? '' : 'none';

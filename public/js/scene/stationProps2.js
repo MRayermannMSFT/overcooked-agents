@@ -194,7 +194,7 @@ export function buildTrash(p) {
       junk.rotation.set(t * 5, t * 3, 0);
     }
   };
-  p.anchor.y = 1.85;
+  p.anchor.y = 1.55;
 }
 
 export function buildAsk(p) {

@@ -1,4 +1,4 @@
-import { STATIONS, STATION_BY_ID } from '/shared/stations.js';
+import { STATIONS, STATION_BY_ID } from '../shared/stations.js';
 import { iconSvg, stationIconSvg } from './icons.js';
 import { escapeHtml } from './overlay.js';
 import { fmtDur } from './hud.js';
@@ -165,7 +165,7 @@ export class Panels {
       Chefs run between stations as the agent works — the same way a sushi order needs nori, rice, fish, plating and serving.</p>
       <div class="menu-grid">${cards}</div>
       <div class="menu-extra">
-        <div>${iconSvg('mystery', 26)}<span><b>Tickets</b> are prompts. The dish levels up as the order passes through the kitchen: Miso Soup → Sashimi → Maki → Tempura Roll → Bento → Omakase.</span></div>
+        <div>${iconSvg('mystery', 26)}<span><b>Tickets</b> are prompts. The dish levels up as the order passes through the kitchen: Miso Soup → Sashimi → Maki Roll → Tempura → Bento Box → Omakase.</span></div>
         <div>${iconSvg('coin', 26)}<span><b>Coins</b>: 20 per served order plus a tip for speed. Cancelled orders cost 10.</span></div>
         <div>${iconSvg('fire', 26)}<span><b>Fires</b> are failed builds, tests or commands. Smoke means a minor slip (a failed read or edit).</span></div>
         <div>${iconSvg('hat', 26)}<span><b>Sous-chefs</b> (smaller, with bandanas) are sub-agents the head chef called in.</span></div>

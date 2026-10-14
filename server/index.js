@@ -5,7 +5,7 @@
  */
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { KitchenState } from '../shared/normalize.js';
+import { KitchenState } from '../public/shared/normalize.js';
 import { CopilotWatcher } from './watcher.js';
 import { createKitchenServer } from './server.js';
 import { HELP, defaultStateDir, parseArgs, parseSince } from './config.js';

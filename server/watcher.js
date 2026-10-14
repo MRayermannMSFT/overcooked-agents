@@ -3,7 +3,7 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { FileTailer } from './tail.js';
 import { parseFlatYaml, workspaceMeta } from './yaml.js';
-import { wantsLine } from '../shared/normalize.js';
+import { wantsLine } from '../public/shared/normalize.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LOCK = /^inuse\.(\d+)\.lock$/;

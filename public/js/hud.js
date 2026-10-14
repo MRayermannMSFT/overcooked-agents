@@ -1,4 +1,4 @@
-import { STATION_BY_ID } from '/shared/stations.js';
+import { STATION_BY_ID } from '../shared/stations.js';
 import { iconSvg, stationIconSvg, dishFor } from './icons.js';
 import { escapeHtml } from './overlay.js';
 
@@ -6,7 +6,8 @@ export const fmtDur = (ms) => {
   const s = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(s / 60);
   const h = Math.floor(m / 60);
-  return h ? `${h}:${String(m % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${m}:${String(s % 60).padStart(2, '0')}`;
+  if (h >= 24) return `${Math.floor(h / 24)}d`;
+  return h ? `${h}h${String(m % 60).padStart(2, '0')}` : `${m}:${String(s % 60).padStart(2, '0')}`;
 };
 
 /** How long an order can cook before its ticket timer runs out (it just turns red and shakes). */

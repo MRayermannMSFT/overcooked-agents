@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { KitchenState, SessionTracker, firstSentence, tipFor, wantsLine, exitCodeOf } from '../shared/normalize.js';
+import { KitchenState, SessionTracker, firstSentence, tipFor, wantsLine, exitCodeOf } from '../public/shared/normalize.js';
 
 let clock = Date.parse('2026-10-14T10:00:00.000Z');
 const T = (secs = 1) => new Date((clock += secs * 1000)).toISOString();

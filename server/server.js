@@ -5,7 +5,6 @@ import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC_DIR = path.join(ROOT, 'public');
-const SHARED_DIR = path.join(ROOT, 'shared');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -158,6 +157,7 @@ export function createKitchenServer({ kitchen, watcher, host = '127.0.0.1', info
         });
       }
       if (p === '/api/state') return sendJson(res, 200, { ...kitchen.snapshot(), info });
+      if (p.startsWith('/api/') && p !== '/api/stream') return send(res, 404, 'Not found');
       if (p === '/api/stream') {
         res.writeHead(200, {
           ...SECURITY_HEADERS,
@@ -172,8 +172,6 @@ export function createKitchenServer({ kitchen, watcher, host = '127.0.0.1', info
         req.on('close', () => clients.delete(res));
         return;
       }
-      if (p.startsWith('/shared/')) return await serveFile(req, res, SHARED_DIR, p.slice('/shared'.length));
-      if (p.startsWith('/api/')) return send(res, 404, 'Not found');
       return await serveFile(req, res, PUBLIC_DIR, p);
     } catch (err) {
       if (!res.headersSent) send(res, 500, 'Internal error');

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import { KitchenState } from '../shared/normalize.js';
+import { KitchenState } from '../public/shared/normalize.js';
 import { CopilotWatcher } from '../server/watcher.js';
 import { createKitchenServer } from '../server/server.js';
 

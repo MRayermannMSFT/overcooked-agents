@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MAP, W, D, buildStations, findPath, isWalkable, IDLE_SPOTS, SPAWN, DOOR_INSIDE, lineClear } from '../public/js/scene/layout.js';
-import { STATIONS } from '../shared/stations.js';
+import { STATIONS } from '../public/shared/stations.js';
 
 test('map is rectangular', () => {
   for (const row of MAP) assert.equal(row.length, W);

@@ -74,7 +74,7 @@ export class Store {
 export function connectLive(store, { onUnavailable } = {}) {
   let opened = false;
   let failures = 0;
-  const es = new EventSource('/api/stream');
+  const es = new EventSource('api/stream');
   es.addEventListener('snapshot', (ev) => {
     opened = true;
     failures = 0;
@@ -85,7 +85,8 @@ export function connectLive(store, { onUnavailable } = {}) {
   es.onerror = () => {
     failures++;
     store.setConnection(opened ? 'reconnecting' : 'offline');
-    if (!opened && failures >= 2 && onUnavailable) {
+    // A 404 (static hosting, no server) closes the stream for good; a refused connection keeps retrying.
+    if (!opened && (es.readyState === EventSource.CLOSED || failures >= 2) && onUnavailable) {
       es.close();
       onUnavailable();
     }

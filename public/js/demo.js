@@ -1,4 +1,4 @@
-import { KitchenState } from '/shared/normalize.js';
+import { KitchenState } from '../shared/normalize.js';
 
 /**
  * Demo shift: simulated Copilot sessions that emit realistic events.jsonl-style events.
@@ -105,7 +105,7 @@ export class DemoShift {
     this.store.applySnapshot({ ...this.kitchen.snapshot(), info: { mode: 'demo' } });
     this.pending = { changed: new Set(), fx: [] };
     this.timer = setInterval(() => this.flush(), 80);
-    this.chefs.forEach((c, i) => this.runChef(c, 0.3 + i * 0.9));
+    this.chefs.forEach((c, i) => this.runChef(c, i === 0 ? 0.3 : i * 4.5 + this.rand() * 3));
   }
 
   stop() {

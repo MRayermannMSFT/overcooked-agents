@@ -120,8 +120,9 @@ test('sub-agents become sous-chefs with their own tools', () => {
   assert.equal(fx[0].station, 'search');
   assert.deepEqual(s.orders[0].stations, ['plan'], "sous-chef work doesn't add ingredients to the head chef's ticket");
   fx = run(s, [ev('subagent.completed', { toolCallId: 'task1', agentName: 'explore' }, { agentId: 'ag1' })]);
-  assert.equal(fx[0].kind, 'sub-end');
-  assert.equal(fx[0].ok, true);
+  const subEnd = fx.find((f) => f.kind === 'sub-end');
+  assert.equal(subEnd.ok, true);
+  assert.equal(fx.find((f) => f.kind === 'tool-end').toolCallId, 'g', 'its unfinished grep is released');
   assert.equal(s.subagents.size, 0);
   assert.equal([...s.tools.values()].filter((t) => t.agentId).length, 0);
 });
@@ -143,7 +144,7 @@ test('abort fails the open order; task_complete serves it', () => {
   run(s, [ev('user.message', { content: 'a', interactionId: 'i1' }), ev('assistant.turn_start', { interactionId: 'i1' })]);
   run(s, [ev('tool.execution_start', { toolCallId: 'v', toolName: 'view', arguments: {} })]);
   let fx = run(s, [ev('abort', { reason: 'user_initiated' })]);
-  assert.equal(fx[0].kind, 'failed');
+  assert.ok(fx.find((f) => f.kind === 'failed'));
   assert.equal(s.stats.aborted, 1);
   assert.equal(s.stats.coins, -10);
   assert.equal(s.tools.size, 0);
@@ -233,6 +234,65 @@ test('KitchenState visibility and totals', () => {
   assert.equal(k.totals().coins, 0, 'coins never go negative');
   const snap = k.snapshot(1_030_000);
   assert.equal(snap.sessions.length, 2);
+});
+
+test('abort releases in-flight tools with cancelled tool-ends (so chefs never get stuck)', () => {
+  const s = new SessionTracker('r1');
+  run(s, [ev('user.message', { content: 'go', interactionId: 'i' }), ev('assistant.turn_start', { interactionId: 'i' })]);
+  run(s, [
+    ev('tool.execution_start', { toolCallId: 'main', toolName: 'powershell', arguments: { command: 'npm test' } }),
+    ev('subagent.started', { agentName: 'explore' }, { agentId: 'ag' }),
+    ev('tool.execution_start', { toolCallId: 'sub', toolName: 'grep', arguments: {} }, { agentId: 'ag' }),
+  ]);
+  const fx = run(s, [ev('abort', { reason: 'user_initiated' })]);
+  const ends = fx.filter((f) => f.kind === 'tool-end');
+  assert.deepEqual(ends.map((f) => [f.toolCallId, f.cancelled, f.ok]), [['main', true, null]]);
+  assert.ok(fx.some((f) => f.kind === 'failed'));
+  assert.deepEqual([...s.tools.keys()], ['sub'], 'the sous-chef keeps working');
+  // A completion that arrives after the abort is ignored.
+  assert.deepEqual(run(s, [ev('tool.execution_complete', { toolCallId: 'main', success: true })]), []);
+  const subEnd = run(s, [ev('subagent.failed', { agentName: 'explore' }, { agentId: 'ag' })]);
+  assert.deepEqual(subEnd.map((f) => f.kind), ['tool-end', 'sub-end']);
+  assert.equal(subEnd[0].toolCallId, 'sub');
+  assert.equal(s.tools.size, 0);
+});
+
+test('a dead or resumed session never pays out for orders from the old process', () => {
+  const s = new SessionTracker('r2');
+  run(s, [
+    ev('user.message', { content: 'old order', interactionId: 'i1' }),
+    ev('assistant.turn_start', { interactionId: 'i1' }),
+    ev('tool.execution_start', { toolCallId: 'q', toolName: 'ask_user', arguments: {} }),
+  ]);
+  s.setAlive(false); // process killed without session.shutdown
+  assert.equal(s.orders.length, 0);
+  assert.equal(s.tools.size, 0);
+  s.setAlive(true);
+  let fx = run(s, [ev('session.resume', { context: {} })]);
+  assert.deepEqual(fx, []);
+  fx = run(s, [
+    ev('user.message', { content: 'new order', interactionId: 'i2' }),
+    ev('assistant.turn_start', { interactionId: 'i2' }),
+    ev('assistant.message', { content: 'Done.', toolRequests: [] }),
+    ev('assistant.turn_end', {}),
+  ]);
+  assert.deepEqual(fx.filter((f) => f.kind === 'served').map((f) => f.orderId), ['i2']);
+  assert.equal(s.stats.served, 1);
+
+  // Resume without a liveness change (e.g. replaying history) also drops the stale order and tool.
+  const r = new SessionTracker('r3');
+  run(r, [ev('user.message', { content: 'x', interactionId: 'a' }), ev('tool.execution_start', { toolCallId: 't', toolName: 'view', arguments: {} })]);
+  fx = run(r, [ev('session.resume', { context: {} })]);
+  assert.deepEqual(fx.map((f) => [f.kind, f.cancelled]), [['tool-end', true]]);
+  assert.equal(r.orders.length, 0);
+});
+
+test('remembered shell ids are capped', () => {
+  const s = new SessionTracker('r4');
+  for (let i = 0; i < 200; i++) s.rememberShell(i, 'build');
+  assert.equal(s.shells.size, 64);
+  assert.equal(s.shells.get('199'), 'build');
+  assert.equal(s.shells.has('0'), false);
 });
 
 test('helpers', () => {

@@ -21,6 +21,18 @@ export function hashString(s) {
 }
 
 let blobTex = null;
+const ITEM_PROTOTYPES = new Map();
+
+/** Held items are cloned from one prototype per kind, so they share geometry instead of leaking it. */
+function heldItem(kind) {
+  if (!ITEM_PROTOTYPES.has(kind)) {
+    const proto = makeItem(kind);
+    if (proto) shadow(proto, true, false);
+    ITEM_PROTOTYPES.set(kind, proto);
+  }
+  const proto = ITEM_PROTOTYPES.get(kind);
+  return proto ? proto.clone() : null;
+}
 
 /**
  * A chubby, armless chef with floating hands and a tall hat, built from primitives.
@@ -128,7 +140,8 @@ export class ChefModel {
 
     // Blob shadow + selection ring (not part of the bobbing body)
     blobTex ||= blobTexture();
-    const blob = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.95), new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false }));
+    this.blobMat = new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false });
+    const blob = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.95), this.blobMat);
     blob.rotation.x = -Math.PI / 2;
     blob.position.y = 0.012;
     this.root.add(blob);
@@ -159,11 +172,19 @@ export class ChefModel {
     if (kind === this.heldKind) return;
     this.heldKind = kind;
     this.holder.clear();
-    const item = kind ? makeItem(kind) : null;
-    if (item) {
-      shadow(item, true, false);
-      this.holder.add(item);
-    }
+    const item = kind ? heldItem(kind) : null;
+    if (item) this.holder.add(item);
+  }
+
+  /** Free this chef's own GPU resources (shared materials, textures and held-item geometry stay). */
+  dispose() {
+    this.setHeld(null);
+    this.root.traverse((o) => {
+      if (o.isMesh) o.geometry?.dispose();
+    });
+    this.colorMat.dispose();
+    this.ringMat.dispose();
+    this.blobMat.dispose();
   }
 
   /**

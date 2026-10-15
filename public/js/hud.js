@@ -89,7 +89,10 @@ export class Hud {
   renderSessions(list) {
     this.sessions = list;
     const open = [];
-    for (const s of list) for (const o of s.orders || []) open.push({ key: `${s.id}|${o.id}`, order: o, session: s });
+    for (const s of list) {
+      if (s.status === 'offline') continue; // a clocked-out chef's tickets leave with them
+      for (const o of s.orders || []) open.push({ key: `${s.id}|${o.id}`, order: o, session: s });
+    }
     open.sort((a, b) => a.order.startedAt - b.order.startedAt);
     const shown = open.slice(-MAX_TICKETS);
     const keep = new Set(shown.map((x) => x.key));

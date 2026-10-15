@@ -151,15 +151,34 @@ export class SessionTracker {
     if (this.alive === alive) return false;
     this.alive = alive;
     if (alive === false) {
-      // A dead process can't be mid-tool; clear in-flight work so the chef can clock out.
+      // A dead process can't be mid-tool or mid-order; clear in-flight work so the chef can clock out
+      // (and so a later resume doesn't pay out for an order that never finished).
       this.tools.clear();
       this.subagents.clear();
       this.permissions.clear();
+      this.orders = [];
       this.inTurn = false;
+      this.pendingFinal = false;
       this.compacting = false;
     }
     this.version++;
     return true;
+  }
+
+  /** Remove in-flight tools matching `pred`, returning `tool-end` effects so renderers can let go of them. */
+  dropTools(pred, at) {
+    const fx = [];
+    for (const [k, t] of this.tools) {
+      if (!pred(t)) continue;
+      this.tools.delete(k);
+      fx.push({ kind: 'tool-end', sessionId: this.id, agentId: t.agentId, toolCallId: t.toolCallId, station: t.station, ok: null, cancelled: true, durationMs: Math.max(0, at - t.startedAt), error: null, at });
+    }
+    return fx;
+  }
+
+  rememberShell(id, station) {
+    this.shells.set(String(id), station);
+    if (this.shells.size > 64) this.shells.delete(this.shells.keys().next().value);
   }
 
   pushRecent(entry) {
@@ -213,10 +232,14 @@ export class SessionTracker {
         if (!this.startedAt) this.startedAt = Date.parse(data.startTime) || at;
         this.ended = false;
         if (e.type === 'session.resume') {
+          // A new process picked the session up: whatever the old one was doing is over.
           this.inTurn = false;
-          this.tools.clear();
+          this.pendingFinal = false;
+          this.compacting = false;
+          fx.push(...this.dropTools(() => true, at));
           this.subagents.clear();
           this.permissions.clear();
+          this.orders = [];
         }
         break;
       }
@@ -225,7 +248,7 @@ export class SessionTracker {
         this.inTurn = false;
         this.pendingFinal = false;
         this.compacting = false;
-        this.tools.clear();
+        fx.push(...this.dropTools(() => true, at));
         this.subagents.clear();
         this.permissions.clear();
         this.orders = [];
@@ -284,7 +307,7 @@ export class SessionTracker {
           station = (sid != null && this.shells.get(String(sid))) || this.lastShellStation || 'shell';
         } else if (isShellTool(name)) {
           this.lastShellStation = station;
-          if (args && args.shellId != null) this.shells.set(String(args.shellId), station);
+          if (args && args.shellId != null) this.rememberShell(args.shellId, station);
         }
         const toolCallId = data.toolCallId || e.id || `tool-${at}`;
         const tool = { toolCallId, agentId, tool: name, station, label, startedAt: at };
@@ -311,7 +334,7 @@ export class SessionTracker {
         const shellish = isShellTool(tool.tool) || isShellFollowupTool(tool.tool);
         if (isShellTool(tool.tool)) {
           const sid = shellIdOf(data);
-          if (sid) this.shells.set(sid, tool.station);
+          if (sid) this.rememberShell(sid, tool.station);
         }
         let ok = data.success !== false;
         let error = null;
@@ -366,7 +389,7 @@ export class SessionTracker {
         if (!agentId) break;
         const s = this.subagents.get(agentId);
         this.subagents.delete(agentId);
-        for (const [k, t] of this.tools) if (t.agentId === agentId) this.tools.delete(k);
+        fx.push(...this.dropTools((t) => t.agentId === agentId, at));
         fx.push({ kind: 'sub-end', sessionId: this.id, agentId, ok: e.type === 'subagent.completed', displayName: s?.displayName || data.agentDisplayName || null, at });
         break;
       }
@@ -374,7 +397,7 @@ export class SessionTracker {
         if (agentId) break;
         this.inTurn = false;
         this.pendingFinal = false;
-        for (const [k, t] of this.tools) if (!t.agentId) this.tools.delete(k);
+        fx.push(...this.dropTools((t) => !t.agentId, at));
         this.permissions.clear();
         fx.push(...this.closeOrders('aborted', at, counts));
         break;

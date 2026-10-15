@@ -120,10 +120,14 @@ export class Director {
         e.status = s.status;
         e.statusSince = t;
       }
+      e.liveTools = new Set((s.tools || []).filter((x) => !x.agentId).map((x) => x.toolCallId));
       for (const sa of s.subagents || []) {
         const key = `${s.id}:${sa.agentId}`;
         wanted.add(key);
         if (!this.entities.has(key)) this.spawnSous(s.id, sa);
+      }
+      for (const sub of this.entities.values()) {
+        if (sub.sous && sub.sessionId === s.id) sub.liveTools = new Set((s.tools || []).filter((x) => x.agentId === sub.agentId).map((x) => x.toolCallId));
       }
     }
     for (const e of this.entities.values()) {
@@ -172,11 +176,8 @@ export class Director {
         if (!e) return;
         for (const task of [e.task, ...e.queue]) {
           if (!task || !task.toolCalls || !task.toolCalls.has(f.toolCallId)) continue;
-          task.toolCalls.set(f.toolCallId, f.ok);
-          task.ended = [...task.toolCalls.values()].every((v) => v !== null);
-          if (f.ok === false) task.ok = false;
-          else if (task.ended && task.ok !== false) task.ok = true;
-          if (task === e.task && e.prop && task.ended) e.prop.endJob(t, task.ok !== false);
+          task.toolCalls.set(f.toolCallId, f.cancelled ? 'cancelled' : f.ok);
+          this.settleTask(e, task);
         }
         break;
       }
@@ -245,6 +246,39 @@ export class Director {
   }
 
   /**
+   * Recompute a task's outcome from its tool calls. Values: null = running, true/false = finished,
+   * 'cancelled' / 'lost' = gone without a result (aborted, or the effect never reached us).
+   */
+  settleTask(e, task) {
+    const values = [...task.toolCalls.values()];
+    task.ended = values.every((v) => v !== null);
+    if (values.includes(false)) task.ok = false;
+    else if (task.ended && task.ok !== false) task.ok = true;
+    task.cancelled = task.ended && values.every((v) => v === 'cancelled' || v === 'lost');
+    if (task === e.task && e.prop && task.ended) {
+      if (task.cancelled) e.prop.job = e.prop.users.size > 1 ? e.prop.job : null;
+      else e.prop.endJob(this.time, task.ok !== false);
+    }
+  }
+
+  /**
+   * Safety net for effects we never saw (SSE reconnects, aborted tools): any tool call that the
+   * session snapshot no longer lists as running is treated as finished.
+   */
+  reconcile(e, t) {
+    const task = e.task;
+    if (!task || task.ended || task.special || task.ambient || !e.liveTools || t - task.queuedAt < 2) return;
+    let changed = false;
+    for (const [id, v] of task.toolCalls) {
+      if (v === null && !e.liveTools.has(id)) {
+        task.toolCalls.set(id, 'lost');
+        changed = true;
+      }
+    }
+    if (changed) this.settleTask(e, task);
+  }
+
+  /**
    * Keep chefs close to real time: when work piles up, drop the oldest steps that already finished
    * (they were quick and are history now). Special steps (serving, fire fighting) are never dropped.
    */
@@ -284,7 +318,10 @@ export class Director {
 
   remove(e) {
     this.release(e);
+    if (e.prop) e.prop.users.delete(e.key);
     this.world.scene.remove(e.model.root);
+    e.model.dispose();
+    this.fx.rates.delete(`${e.key}:foam`);
     this.entities.delete(e.key);
     if (this.selected === e.key) this.selected = null;
     this.emit('depart', e);
@@ -354,10 +391,10 @@ export class Director {
     if (!task) return;
     if (e.prop) {
       e.prop.users.delete(e.key);
-      if (task.ended) e.prop.endJob(this.time, ok !== false && task.ok !== false);
+      if (task.ended && !task.cancelled) e.prop.endJob(this.time, ok !== false && task.ok !== false);
       else if (e.prop.job && !e.prop.users.size) e.prop.job = null;
     }
-    if (task.arrivedAt != null && !task.special) e.model.setHeld(ITEM_AFTER[task.station] ?? null);
+    if (task.arrivedAt != null && !task.special && !task.cancelled) e.model.setHeld(ITEM_AFTER[task.station] ?? null);
     if (task.special === 'serve' || task.special === 'extinguish') e.model.setHeld(null);
     e.task = null;
     e.prop = null;
@@ -450,6 +487,7 @@ export class Director {
 
   think(e, t, dt = 1 / 60) {
     if (e.state === 'arriving') e.state = 'active';
+    this.reconcile(e, t);
     const task = e.task;
     const arrived = task && !e.path.length && task.arrivedAt != null;
 

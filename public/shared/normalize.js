@@ -96,6 +96,8 @@ export class SessionTracker {
     this.ended = false;
     this.inTurn = false;
     this.pendingFinal = false;
+    /** interactionId of the turn the agent is working on (from assistant.turn_start); null if unknown. */
+    this.activeInteraction = null;
     this.orders = [];
     this.tools = new Map();
     this.subagents = new Map();
@@ -157,6 +159,7 @@ export class SessionTracker {
       this.subagents.clear();
       this.permissions.clear();
       this.orders = [];
+      this.activeInteraction = null;
       this.inTurn = false;
       this.pendingFinal = false;
       this.compacting = false;
@@ -186,9 +189,11 @@ export class SessionTracker {
     if (this.recent.length > MAX_RECENT) this.recent.splice(0, this.recent.length - MAX_RECENT);
   }
 
-  closeOrders(outcome, at, counts) {
+  /** Close the given tickets (default: all) as served or cancelled and remove them. */
+  closeOrders(outcome, at, counts, which = this.orders) {
     const fx = [];
-    for (const o of this.orders) {
+    const closing = new Set(which);
+    for (const o of closing) {
       if (o.implicit && o.toolCount === 0) continue; // an empty follow-up turn isn't worth a ticket
       const durationMs = Math.max(0, at - o.startedAt);
       if (outcome === 'served') {
@@ -201,8 +206,29 @@ export class SessionTracker {
         fx.push({ kind: 'failed', sessionId: this.id, orderId: o.id, coins: -ABORT_PENALTY, durationMs, at });
       }
     }
-    this.orders = [];
+    this.orders = this.orders.filter((o) => !closing.has(o));
     return fx;
+  }
+
+  /**
+   * The active interaction ended (served or cancelled): close only its ticket, so prompts queued
+   * behind it keep theirs. Older tickets that never got an ending of their own are dropped quietly.
+   * Without interaction ids (older Copilot versions) every open ticket is closed.
+   */
+  finishInteraction(outcome, at, counts) {
+    const id = this.activeInteraction;
+    if (!id) return this.closeOrders(outcome, at, counts);
+    const idx = this.orders.findIndex((o) => o.id === id);
+    if (idx < 0) return [];
+    const fx = this.closeOrders(outcome, at, counts, [this.orders[idx]]);
+    this.orders.splice(0, idx);
+    return fx;
+  }
+
+  /** The ticket the agent is cooking right now: the active interaction's, else the newest. */
+  currentOrder() {
+    const active = this.activeInteraction && this.orders.find((o) => o.id === this.activeInteraction);
+    return active || this.orders[this.orders.length - 1] || null;
   }
 
   openOrder(id, text, at, implicit) {
@@ -240,6 +266,7 @@ export class SessionTracker {
           this.subagents.clear();
           this.permissions.clear();
           this.orders = [];
+          this.activeInteraction = null;
         }
         break;
       }
@@ -252,6 +279,7 @@ export class SessionTracker {
         this.subagents.clear();
         this.permissions.clear();
         this.orders = [];
+        this.activeInteraction = null;
         break;
       case 'session.model_change':
         if (!agentId && data.newModel) this.meta.model = data.newModel;
@@ -265,18 +293,26 @@ export class SessionTracker {
           if (s && !s.task) s.task = truncate(data.content, 160);
           break;
         }
-        const f = this.openOrder(data.interactionId || e.id || `order-${at}`, truncate(data.content || '', 280), at, false);
+        const id = data.interactionId || null;
+        const f = this.openOrder(id || e.id || `order-${at}`, truncate(data.content || '', 280), at, false);
         if (f) fx.push(f);
-        this.inTurn = true;
-        this.pendingFinal = false;
+        // A prompt queued behind a running interaction must not reset that interaction's turn state.
+        const queuedBehind = this.inTurn && id && this.activeInteraction && id !== this.activeInteraction;
+        if (!queuedBehind) {
+          this.inTurn = true;
+          this.pendingFinal = false;
+        }
         break;
       }
       case 'assistant.turn_start': {
         if (agentId) break;
         this.inTurn = true;
         this.pendingFinal = false;
-        if (!this.orders.length) {
-          const f = this.openOrder(data.interactionId || `turn-${at}`, '', at, true);
+        const id = data.interactionId || null;
+        this.activeInteraction = id;
+        const hasTicket = id ? this.orders.some((o) => o.id === id) : this.orders.length > 0;
+        if (!hasTicket) {
+          const f = this.openOrder(id || `turn-${at}`, '', at, true);
           if (f) fx.push(f);
         }
         break;
@@ -295,7 +331,7 @@ export class SessionTracker {
         this.inTurn = false;
         if (this.pendingFinal) {
           this.pendingFinal = false;
-          fx.push(...this.closeOrders('served', at, counts));
+          fx.push(...this.finishInteraction('served', at, counts));
         }
         break;
       case 'tool.execution_start': {
@@ -313,7 +349,7 @@ export class SessionTracker {
         const tool = { toolCallId, agentId, tool: name, station, label, startedAt: at };
         this.tools.set(toolCallId, tool);
         if (!agentId) {
-          const order = this.orders[this.orders.length - 1];
+          const order = this.currentOrder();
           if (order) {
             order.toolCount++;
             if (!order.stations.includes(station)) order.stations.push(station);
@@ -366,7 +402,7 @@ export class SessionTracker {
           }
           fx.push({ kind: 'fire', severity, sessionId: this.id, agentId: tool.agentId, station: tool.station, message: error, at });
         }
-        if (tool.tool === 'task_complete' && ok && !tool.agentId) fx.push(...this.closeOrders('served', at, counts));
+        if (tool.tool === 'task_complete' && ok && !tool.agentId) fx.push(...this.finishInteraction('served', at, counts));
         break;
       }
       case 'subagent.started': {
@@ -399,7 +435,7 @@ export class SessionTracker {
         this.pendingFinal = false;
         fx.push(...this.dropTools((t) => !t.agentId, at));
         this.permissions.clear();
-        fx.push(...this.closeOrders('aborted', at, counts));
+        fx.push(...this.finishInteraction('aborted', at, counts));
         break;
       case 'session.error': {
         const station = this.currentStation(agentId) || 'plan';
@@ -424,7 +460,7 @@ export class SessionTracker {
         break;
       case 'session.task_complete':
         if (agentId) break;
-        fx.push(...this.closeOrders(data.success === false ? 'aborted' : 'served', at, counts));
+        fx.push(...this.finishInteraction(data.success === false ? 'aborted' : 'served', at, counts));
         break;
       default:
         break;

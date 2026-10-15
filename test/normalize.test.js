@@ -295,6 +295,82 @@ test('remembered shell ids are capped', () => {
   assert.equal(s.shells.has('0'), false);
 });
 
+test('a prompt queued behind a running interaction keeps its own ticket', () => {
+  const s = new SessionTracker('q1');
+  run(s, [
+    ev('user.message', { content: 'first', interactionId: 'A' }),
+    ev('assistant.turn_start', { interactionId: 'A' }),
+    ev('tool.execution_start', { toolCallId: 't1', toolName: 'view', arguments: {} }),
+  ]);
+  // The second prompt is logged while A is still cooking (e.g. a client that records queued prompts up front).
+  let fx = run(s, [ev('user.message', { content: 'second', interactionId: 'B', delivery: 'queued' })]);
+  assert.deepEqual(fx.map((f) => [f.kind, f.orderId]), [['order', 'B']]);
+  run(s, [
+    ev('tool.execution_complete', { toolCallId: 't1', success: true }),
+    ev('tool.execution_start', { toolCallId: 't2', toolName: 'edit', arguments: {} }),
+    ev('tool.execution_complete', { toolCallId: 't2', success: true }),
+  ]);
+  assert.deepEqual(s.orders.map((o) => [o.id, o.stations.join(',')]), [['A', 'read,code'], ['B', '']], 'steps go to the active ticket');
+
+  fx = run(s, [ev('assistant.message', { content: 'Done with A.', toolRequests: [] }), ev('assistant.turn_end', {})]);
+  assert.deepEqual(fx.filter((f) => f.kind === 'served').map((f) => f.orderId), ['A'], 'only A is served');
+  assert.deepEqual(s.orders.map((o) => o.id), ['B']);
+  assert.equal(s.stats.served, 1);
+
+  fx = run(s, [
+    ev('assistant.turn_start', { interactionId: 'B' }),
+    ev('tool.execution_start', { toolCallId: 't3', toolName: 'grep', arguments: {} }),
+    ev('tool.execution_complete', { toolCallId: 't3', success: true }),
+    ev('assistant.turn_end', {}),
+    ev('assistant.turn_start', { interactionId: 'B' }),
+    ev('assistant.message', { content: 'Done with B.', toolRequests: [] }),
+    ev('assistant.turn_end', {}),
+  ]);
+  assert.deepEqual(fx.filter((f) => f.kind === 'served').map((f) => [f.orderId, f.stations.join(',')]), [['B', 'search']]);
+  assert.equal(s.orders.length, 0);
+  assert.equal(s.stats.served, 2);
+});
+
+test('aborting an interaction does not cancel a prompt queued behind it', () => {
+  const s = new SessionTracker('q2');
+  run(s, [
+    ev('user.message', { content: 'first', interactionId: 'A' }),
+    ev('assistant.turn_start', { interactionId: 'A' }),
+    ev('user.message', { content: 'second', interactionId: 'B', delivery: 'queued' }),
+  ]);
+  const fx = run(s, [ev('abort', { reason: 'user_initiated' })]);
+  assert.deepEqual(fx.filter((f) => f.kind === 'failed').map((f) => f.orderId), ['A']);
+  assert.deepEqual(s.orders.map((o) => o.id), ['B']);
+  assert.equal(s.stats.aborted, 1);
+});
+
+test('steering messages join the running ticket; stale older tickets are dropped quietly', () => {
+  const s = new SessionTracker('q3');
+  // An interaction that ended without a final answer leaves a stale ticket behind.
+  run(s, [ev('user.message', { content: 'stale', interactionId: 'S' }), ev('assistant.turn_start', { interactionId: 'S' }), ev('assistant.turn_end', {})]);
+  run(s, [ev('user.message', { content: 'fresh', interactionId: 'F' }), ev('assistant.turn_start', { interactionId: 'F' })]);
+  let fx = run(s, [ev('user.message', { content: 'also do this', interactionId: 'F', delivery: 'steering' })]);
+  assert.deepEqual(fx, [], 'steering reuses the interaction id, so no new ticket');
+  assert.deepEqual(s.orders.map((o) => o.id), ['S', 'F']);
+  fx = run(s, [ev('assistant.message', { content: 'Done.', toolRequests: [] }), ev('assistant.turn_end', {})]);
+  assert.deepEqual(fx.filter((f) => f.kind === 'served').map((f) => f.orderId), ['F'], 'no coins for the stale ticket');
+  assert.equal(s.orders.length, 0, 'but it is cleared');
+});
+
+test('without interaction ids (older Copilot versions) a final answer closes every open ticket', () => {
+  const s = new SessionTracker('q4');
+  const fx = run(s, [
+    ev('user.message', { content: 'old format' }),
+    ev('assistant.turn_start', {}),
+    ev('tool.execution_start', { toolCallId: 'x', toolName: 'view', arguments: {} }),
+    ev('tool.execution_complete', { toolCallId: 'x', success: true }),
+    ev('assistant.message', { content: 'Done.', toolRequests: [] }),
+    ev('assistant.turn_end', {}),
+  ]);
+  assert.equal(fx.filter((f) => f.kind === 'served').length, 1);
+  assert.equal(s.orders.length, 0);
+});
+
 test('helpers', () => {
   assert.equal(tipFor(30_000), 8);
   assert.equal(tipFor(4 * 3600_000), 0);

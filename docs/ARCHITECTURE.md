@@ -66,21 +66,23 @@ and returns **effects** (`fx`) for the renderer:
 | Raw event | State change | Effect |
 |---|---|---|
 | `session.start` / `session.resume` | metadata (repo, branch, model) | — |
-| `user.message` | open an order | `order` |
-| `assistant.turn_start` | in a turn; opens an implicit "Follow-up" order if none is open | `order` (implicit) |
+| `user.message` | open an order (steering messages reuse the running interaction's id and join its ticket) | `order` |
+| `assistant.turn_start` | in a turn; remembers the active `interactionId` and opens an implicit "Follow-up" order if it has none | `order` (implicit) |
 | `assistant.message` | remember whether it requested tools | `say` (first sentence) |
-| `assistant.turn_end` | if the last message had no tool requests → interaction finished | `served` (coins) |
+| `assistant.turn_end` | if the last message had no tool requests → the active interaction finished | `served` (coins) |
 | `tool.execution_start` | add tool; classify station; add station to the order's ingredients | `tool` |
 | `tool.execution_complete` | remove tool; failure = `success:false` **or** non-zero `shellExecution.exitCode` / `completed with exit code N` | `tool-end`, `fire` |
 | `subagent.started` / `completed` / `failed` | sous-chef joins / leaves | `sub-start`, `sub-end` |
-| `abort` | cancel open orders (−10 coins) | `failed` |
+| `abort` | cancel the active order (−10 coins) | `failed` |
 | `session.error` | fire at the chef's current station | `fire` |
 | `permission.requested` / `completed` | chef waits at the order bell | — |
 | `session.compaction_start` / `complete` | chef "tidies up" at the sink | `say` |
-| `session.task_complete` | serve open orders (autopilot) | `served` |
+| `session.task_complete` | serve the active order (autopilot) | `served` |
 | `session.shutdown` | chef clocks out | — |
 
 Events from sub-agents carry a top-level `agentId`; their tools are tracked separately so they move the sous-chef, not the head chef, and don't add ingredients to the head chef's ticket.
+
+**Tickets follow interactions.** Steps are credited to the active interaction's ticket, and serving or cancelling closes only that ticket, so a prompt queued behind a running interaction keeps its own. Older tickets that never got an ending of their own are cleared without coins. Sessions without interaction ids (older Copilot versions) fall back to closing every open ticket.
 
 **Status** is derived, not stored: `offline` (process gone / shut down) → `waiting` (ask_user or a permission prompt) → `working` (a tool is running, a sub-agent is active, or compacting) → `thinking` (in a turn, between tools) → `idle`.
 

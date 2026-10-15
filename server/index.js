@@ -4,23 +4,11 @@
  * Run `node server/index.js --help` for options.
  */
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { KitchenState } from '../public/shared/normalize.js';
 import { CopilotWatcher } from './watcher.js';
 import { createKitchenServer } from './server.js';
 import { HELP, defaultStateDir, parseArgs, parseSince } from './config.js';
-
-function openBrowser(url) {
-  const [cmd, args] =
-    process.platform === 'win32' ? ['rundll32', ['url.dll,FileProtocolHandler', url]]
-      : process.platform === 'darwin' ? ['open', [url]]
-        : ['xdg-open', [url]];
-  try {
-    spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref();
-  } catch {
-    // Opening a browser is best-effort.
-  }
-}
+import { openBrowser } from './open.js';
 
 async function main() {
   let opts;
@@ -75,7 +63,9 @@ async function main() {
     console.log(`  🧑‍🍳  ${kitchen.sessions.size} session(s) loaded, ${kitchen.visible().length} in the kitchen now (${Date.now() - t0} ms)`);
     if (wildcard) console.log('  ⚠️  Bound to all interfaces: anyone on your network can see your agents\' prompts.');
     console.log('  Press Ctrl+C to close the kitchen.\n');
-    if (opts.open) openBrowser(url);
+    if (opts.open) {
+      openBrowser(url, { onError: () => console.log(`  (Couldn't open a browser automatically. Open ${url} yourself.)\n`) });
+    }
   });
 
   const shutdown = async () => {

@@ -7,6 +7,7 @@ import { FileTailer } from '../server/tail.js';
 import { parseFlatYaml, workspaceMeta } from '../server/yaml.js';
 import { parseArgs, parseSince, defaultStateDir } from '../server/config.js';
 import { allowedHostnames, hostnameOf, safeJoin } from '../server/server.js';
+import { browserCommand, openBrowser } from '../server/open.js';
 
 const tmpDirs = [];
 after(() => {
@@ -127,4 +128,25 @@ test('server helpers: host allow-list and safe static paths', () => {
   assert.equal(safeJoin(base, '/%2e%2e/secret.txt'), null);
   assert.equal(safeJoin(base, '/..%5csecret.txt'), process.platform === 'win32' ? null : path.join(base, '..\\secret.txt'));
   assert.equal(safeJoin(base, '/%E0%A4%A'), null);
+});
+
+test('browserCommand picks the platform opener', () => {
+  assert.deepEqual(browserCommand('http://x/', 'win32'), ['rundll32', ['url.dll,FileProtocolHandler', 'http://x/']]);
+  assert.deepEqual(browserCommand('http://x/', 'darwin'), ['open', ['http://x/']]);
+  assert.deepEqual(browserCommand('http://x/', 'linux'), ['xdg-open', ['http://x/']]);
+});
+
+test('openBrowser reports a missing opener instead of crashing the server', async () => {
+  // Like xdg-open on a headless Linux box: spawn() returns, then the child emits 'error' asynchronously.
+  const err = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('no error reported')), 5000);
+    openBrowser('http://127.0.0.1:1/', {
+      command: ['agent-kitchen-no-such-browser-opener', []],
+      onError: (e) => {
+        clearTimeout(timer);
+        resolve(e);
+      },
+    });
+  });
+  assert.equal(err.code, 'ENOENT');
 });

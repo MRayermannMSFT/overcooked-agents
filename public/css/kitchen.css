@@ -103,9 +103,9 @@ button { font-family: inherit; }
 .hud > * { pointer-events: auto; }
 .hud .orders, .hud .ticker, .hud .banner, .hud .empty { pointer-events: none; }
 
-.orders { position: absolute; top: 12px; left: 12px; right: 380px; display: flex; gap: 10px; align-items: flex-start; flex-wrap: nowrap; }
+.orders { position: absolute; top: 12px; left: 12px; right: 330px; display: flex; gap: 10px; align-items: flex-start; flex-wrap: nowrap; }
 .ticket {
-  width: 172px; flex: none; position: relative; overflow: hidden;
+  width: 184px; flex: none; position: relative; overflow: hidden;
   background: var(--paper); border: 3px solid var(--ink); border-radius: 14px;
   box-shadow: 0 5px 0 rgba(59, 42, 32, 0.35);
   transform-origin: 50% 0;
@@ -128,7 +128,7 @@ button { font-family: inherit; }
 .ticket-head { display: flex; align-items: center; gap: 7px; padding: 5px 8px 2px; }
 .dish { width: 38px; height: 38px; display: grid; place-items: center; flex: none; background: var(--paper-2); border-radius: 10px; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.15)); }
 .ticket-title { min-width: 0; flex: 1; }
-.dish-name { font: 700 14px/1.1 var(--font); color: #2d1f16; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dish-name { font: 700 13.5px/1.1 var(--font); color: #2d1f16; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ticket-head .elapsed { align-self: flex-start; padding: 1px 6px; border-radius: 8px; background: var(--chef); color: #fff; font: 700 11px/1.4 var(--font); text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4); }
 .ticket-chef { display: flex; align-items: center; gap: 5px; margin-top: 2px; font: 600 11.5px/1.2 var(--font); color: var(--ink-soft); white-space: nowrap; }
 .ticket-chef i { width: 10px; height: 10px; border-radius: 50%; background: var(--chef); flex: none; border: 1.5px solid var(--ink); }

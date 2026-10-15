@@ -11,6 +11,8 @@ Every Copilot session becomes a **chef**. Every prompt you send becomes an **ord
 - **Read-only and local.** It never writes to your Copilot folder, and the server only listens on `127.0.0.1`.
 - **Demo shift** built in, so you can see it in action without any agents running.
 
+> **What counts as "Copilot activity"?** Everything that runs through the Copilot agent runtime on this machine: the GitHub Copilot app, Copilot CLI sessions in any terminal, and SDK-based agents — they all record their sessions in `~/.copilot/session-state`. Copilot Chat inside VS Code keeps its history elsewhere and isn't shown yet, and cloud agents run on GitHub's machines rather than yours.
+
 > Inspired by the *Overcooked!* games (Ghost Town Games / Team17). This is an unofficial fan-made tribute: all art is original and generated procedurally in code — no game assets are used.
 
 ---

@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -8,8 +8,14 @@ import { parseFlatYaml, workspaceMeta } from '../server/yaml.js';
 import { parseArgs, parseSince, defaultStateDir } from '../server/config.js';
 import { allowedHostnames, hostnameOf, safeJoin } from '../server/server.js';
 
+const tmpDirs = [];
+after(() => {
+  for (const d of tmpDirs) fs.rmSync(d, { recursive: true, force: true });
+});
+
 function tmpFile(name = 'f.jsonl') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kitchen-tail-'));
+  tmpDirs.push(dir);
   return path.join(dir, name);
 }
 

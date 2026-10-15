@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -10,12 +10,17 @@ import { createKitchenServer } from '../server/server.js';
 
 const SID = '11111111-2222-3333-4444-555555555555';
 const OLD = '99999999-2222-3333-4444-555555555555';
+const tmpDirs = [];
+after(() => {
+  for (const d of tmpDirs) fs.rmSync(d, { recursive: true, force: true });
+});
 
 const line = (type, data = {}, extra = {}) =>
   `${JSON.stringify({ type, data, id: Math.random().toString(36).slice(2), timestamp: new Date().toISOString(), parentId: null, ...extra })}\n`;
 
 function setupStateDir() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kitchen-state-'));
+  tmpDirs.push(root);
   const dir = path.join(root, SID);
   fs.mkdirSync(dir);
   fs.writeFileSync(path.join(dir, 'workspace.yaml'), `id: ${SID}\nrepository: me/demo\nbranch: main\nname: Demo chef\nclient_name: github/cli\n`);

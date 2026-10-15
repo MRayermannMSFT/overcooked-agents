@@ -144,6 +144,12 @@ export async function openBrowser({ width = 1600, height = 900 } = {}) {
       return out;
     },
     wait: sleep,
+    /** Re-render at a different device pixel ratio (e.g. 2 for crisp close-ups). */
+    async setScale(deviceScaleFactor) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor, mobile: false });
+      await page.eval('window.dispatchEvent(new Event("resize")), true');
+      await sleep(400);
+    },
     async close() {
       try {
         await cdp.send('Browser.close');

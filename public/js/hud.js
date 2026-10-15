@@ -1,6 +1,6 @@
 import { STATION_BY_ID } from '../shared/stations.js';
 import { iconSvg, stationIconSvg, dishFor } from './icons.js';
-import { escapeHtml } from './overlay.js';
+import { escapeHtml, chefName } from './overlay.js';
 
 export const fmtDur = (ms) => {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -141,18 +141,19 @@ export class Hud {
     const dish = dishFor(order.stations);
     const color = this.chefColor(session.id);
     const prompt = order.implicit ? 'Follow-up' : this.privateText(order.text, 'Order details hidden');
-    const sig = [dish.name, color, session.title, prompt, order.stations.join(','), order.toolCount, this.settings.privacy].join('|');
+    const title = chefName(session, this.settings);
+    const sig = [dish.name, color, title, prompt, order.stations.join(','), order.toolCount, this.settings.privacy].join('|');
     if (tk.last.sig === sig) return;
     tk.last.sig = sig;
     node.style.setProperty('--chef', color);
     node.querySelector('.dish').innerHTML = iconSvg(dish.icon, 36);
     node.querySelector('.dish-name').textContent = dish.name;
-    node.querySelector('.ticket-chef span').textContent = session.title;
+    node.querySelector('.ticket-chef span').textContent = title;
     const p = node.querySelector('.ticket-prompt');
     p.textContent = prompt;
     p.classList.toggle('muted', order.implicit || this.settings.privacy);
     p.title = this.settings.privacy ? '' : order.text;
-    const ings = order.stations.slice(-6)
+    const ings = order.stations.slice(-5)
       .map((s) => `<span class="ing" title="${escapeHtml(STATION_BY_ID[s]?.sdlc || s)}">${stationIconSvg(s, 18)}</span>`).join('') || '<span class="ing empty">…</span>';
     node.querySelector('.ticket-ings').innerHTML = `${ings}<span class="steps">${order.toolCount}</span>`;
     node.querySelector('.ticket-ings .steps').title = `${order.toolCount} step${order.toolCount === 1 ? '' : 's'} so far`;
@@ -199,7 +200,7 @@ export class Hud {
 
   onFx(f) {
     const session = this.store.sessions.get(f.sessionId);
-    const name = session?.title || 'Chef';
+    const name = chefName(session, this.settings);
     const color = this.chefColor(f.sessionId);
     if (f.kind === 'served' || f.kind === 'failed') {
       const tk = this.tickets.get(`${f.sessionId}|${f.orderId}`);
@@ -222,7 +223,7 @@ export class Hud {
       this.tick(color, f.station, `${name}: fire at the ${STATION_BY_ID[f.station]?.kitchen || 'station'}! ${this.settings.privacy ? '' : f.message || ''}`, 'bad');
       this.banner('FIRE!', 'fire', 1300);
     } else if (f.kind === 'sub-start') {
-      this.tick(color, 'plan', `${name} called in a sous-chef: ${f.displayName || f.name}`);
+      this.tick(color, 'plan', `${name} called in a sous-chef${this.settings.privacy ? '' : `: ${f.displayName || f.name}`}`);
     } else if (f.kind === 'order' && !f.implicit) {
       this.tick(color, 'ask', `New order for ${name}`, 'order');
     }

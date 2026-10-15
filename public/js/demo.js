@@ -46,15 +46,16 @@ function rng(seed) {
 }
 
 export class DemoShift {
-  constructor(store, { seed = Date.now(), speed = 1, chefs = 4 } = {}) {
+  constructor(store, { seed = Date.now(), speed = 1, chefs = 4, prefill = true } = {}) {
     this.store = store;
     this.rand = rng(seed);
     this.speed = Math.max(0.25, speed);
+    this.prefill = prefill;
     this.kitchen = new KitchenState({ countFrom: 0 });
     this.running = false;
     this.pending = { changed: new Set(), fx: [] };
     this.seq = 0;
-    this.chefs = CHEFS.slice(0, Math.max(1, Math.min(CHEFS.length, chefs))).map((c, i) => ({
+    this.chefs = CHEFS.slice(0, Math.max(0, Math.min(CHEFS.length, chefs))).map((c, i) => ({
       ...c,
       id: `demo${i}-0000-4000-8000-${String(i).padStart(12, '0')}`,
       orders: 0,
@@ -78,8 +79,8 @@ export class DemoShift {
     return `${prefix}-${this.seq}-${Math.floor(this.rand() * 1e9).toString(36)}`;
   }
 
-  emit(sessionId, type, data = {}, agentId = null) {
-    const ev = { type, data, id: this.uid('ev'), timestamp: new Date().toISOString(), parentId: null };
+  emit(sessionId, type, data = {}, agentId = null, at = null) {
+    const ev = { type, data, id: this.uid('ev'), timestamp: new Date(at ?? Date.now()).toISOString(), parentId: null };
     if (agentId) ev.agentId = agentId;
     const fx = this.kitchen.ingest(sessionId, ev);
     this.pending.changed.add(sessionId);
@@ -95,17 +96,42 @@ export class DemoShift {
 
   start() {
     this.running = true;
+    const now = Date.now();
     for (const c of this.chefs) {
       const t = this.kitchen.get(c.id);
       t.setMeta({ name: c.name, repo: c.repo, branch: c.branch, client: c.client, model: c.model, cwd: `C:\\src\\${c.repo.split('/')[1]}` });
-      this.emit(c.id, 'session.start', { selectedModel: c.model, startTime: new Date().toISOString(), context: { repository: c.repo, branch: c.branch } });
+      this.emit(c.id, 'session.start', { selectedModel: c.model, startTime: new Date(now - 3600e3).toISOString(), context: { repository: c.repo, branch: c.branch } }, null, now - 3600e3);
       t.setAlive(true);
     }
+    if (this.prefill) this.replayHistory(now);
     this.store.setConnection('demo');
     this.store.applySnapshot({ ...this.kitchen.snapshot(), info: { mode: 'demo' } });
     this.pending = { changed: new Set(), fx: [] };
     this.timer = setInterval(() => this.flush(), 80);
     this.chefs.forEach((c, i) => this.runChef(c, i === 0 ? 0.3 : i * 4.5 + this.rand() * 3));
+  }
+
+  /** Pretend the shift has been going for a while: a few orders already served (no animation). */
+  replayHistory(now) {
+    const steps = [['view', { path: 'src/app.ts' }], ['grep', { pattern: 'TODO' }], ['edit', { path: 'src/app.ts' }],
+      ['powershell', { command: 'npm run build' }], ['powershell', { command: 'npm test' }], ['powershell', { command: 'git commit -m wip' }],
+      ['powershell', { command: 'git push' }]];
+    this.chefs.forEach((c, i) => {
+      for (let k = 0; k < 1 + (i % 2); k++) {
+        let at = now - (50 - i * 7 - k * 20) * 60e3;
+        const interaction = this.uid('past');
+        this.emit(c.id, 'user.message', { content: 'Earlier order', interactionId: interaction }, null, at);
+        this.emit(c.id, 'assistant.turn_start', { interactionId: interaction }, null, at);
+        for (const [name, args] of steps) {
+          const id = this.uid('past-call');
+          at += 9e3;
+          this.emit(c.id, 'tool.execution_start', { toolCallId: id, toolName: name, arguments: args }, null, at);
+          this.emit(c.id, 'tool.execution_complete', { toolCallId: id, success: true, shellExecution: { exitCode: 0 } }, null, at + 4e3);
+        }
+        this.emit(c.id, 'assistant.message', { content: 'Done.', toolRequests: [] }, null, at + 5e3);
+        this.emit(c.id, 'assistant.turn_end', {}, null, at + 5e3);
+      }
+    });
   }
 
   stop() {

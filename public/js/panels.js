@@ -1,6 +1,6 @@
 import { STATIONS, STATION_BY_ID } from '../shared/stations.js';
 import { iconSvg, stationIconSvg } from './icons.js';
-import { escapeHtml } from './overlay.js';
+import { escapeHtml, chefName } from './overlay.js';
 import { fmtDur } from './hud.js';
 
 const STATUS_TEXT = { working: 'Cooking', thinking: 'Thinking', waiting: 'Needs you', idle: 'On break', offline: 'Clocked out' };
@@ -103,11 +103,12 @@ export class Panels {
       const color = this.director.colorFor(s.id);
       const act = this.activityText(e, s);
       const selected = this.director.selected === s.id;
-      const meta = [s.repo, s.branch].filter(Boolean).join(' · ') || s.cwd || '';
+      const meta = this.settings.privacy ? s.repo || '' : [s.repo, s.branch].filter(Boolean).join(' · ') || s.cwd || '';
       const subs = (s.subagents || []).map((sa) => {
         const se = this.director.entities.get(`${s.id}:${sa.agentId}`);
         const sact = this.activityText(se, { status: 'working' });
-        return `<div class="sous-row">${iconSvg('hat', 16)}<b>${escapeHtml(sa.displayName || sa.name)}</b><span>${sact.station ? stationIconSvg(sact.station, 14) : ''}${escapeHtml(sact.text)}</span></div>`;
+        const sname = this.settings.privacy ? sa.name || 'Sous-chef' : sa.displayName || sa.name;
+        return `<div class="sous-row">${iconSvg('hat', 16)}<b>${escapeHtml(sname)}</b><span>${sact.station ? stationIconSvg(sact.station, 14) : ''}${escapeHtml(sact.text)}</span></div>`;
       }).join('');
       let details = '';
       if (selected) {
@@ -121,7 +122,7 @@ export class Panels {
           <div class="kv"><span>Model</span><b>${escapeHtml(s.model || '—')}</b></div>
           <div class="kv"><span>Mode</span><b>${escapeHtml(s.mode || 'interactive')}</b></div>
           <div class="kv"><span>Session</span><b>${escapeHtml(s.id.slice(0, 8))}</b></div>
-          ${s.cwd ? `<div class="kv"><span>Folder</span><b title="${escapeHtml(s.cwd)}">${escapeHtml(s.cwd.split(/[\\/]/).slice(-2).join('/'))}</b></div>` : ''}
+          ${s.cwd && !this.settings.privacy ? `<div class="kv"><span>Folder</span><b title="${escapeHtml(s.cwd)}">${escapeHtml(s.cwd.split(/[\\/]/).slice(-2).join('/'))}</b></div>` : ''}
           <div class="kv"><span>Today</span><b>${s.stats.served} served · ${s.stats.tools} steps · ${s.stats.fires} fires</b></div>
           ${orders ? `<h4>Open orders</h4><ul class="orders-list">${orders}</ul>` : ''}
           ${recent ? `<h4>Recent steps</h4><ul class="recent">${recent}</ul>` : ''}
@@ -131,7 +132,7 @@ export class Panels {
         <div class="row">
           <div class="avatar">${iconSvg('hat', 30)}</div>
           <div class="info">
-            <div class="name">${escapeHtml(s.title)}${s.client ? `<span class="badge">${escapeHtml(s.client)}</span>` : ''}</div>
+            <div class="name">${escapeHtml(chefName(s, this.settings))}${s.client ? `<span class="badge">${escapeHtml(s.client)}</span>` : ''}</div>
             <div class="meta">${escapeHtml(meta)}</div>
             <div class="doing">${act.station ? stationIconSvg(act.station, 16) : ''}<span>${escapeHtml(act.text)}</span></div>
           </div>
@@ -181,7 +182,7 @@ export class Panels {
     this.settingsEl.innerHTML = `<h3>Settings</h3>
       ${opt('labels', 'Station labels', 'Show what each station means')}
       ${opt('chatter', 'Chef chatter', 'Speech bubbles with what the agent says')}
-      ${opt('privacy', 'Hide prompts', 'Mask prompt text, file names and chatter (for screen sharing)')}
+      ${opt('privacy', 'Hide prompts', 'Mask prompts, session names, file names and chatter (for screen sharing)')}
       ${opt('sound', 'Kitchen sounds', 'Dings for orders, sizzles for fires')}
       <div class="row">${other}</div>`;
     this.settingsEl.addEventListener('change', (ev) => {

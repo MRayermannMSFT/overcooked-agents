@@ -90,7 +90,8 @@ if (mode === 'demo') {
   demo = new DemoShift(store, {
     seed: Number(params.get('seed')) || Date.now(),
     speed: Number(params.get('speed')) || 1,
-    chefs: Number(params.get('chefs')) || 4,
+    chefs: params.has('chefs') ? Number(params.get('chefs')) || 0 : 4,
+    prefill: params.get('prefill') !== '0',
   });
   demo.start();
 } else {

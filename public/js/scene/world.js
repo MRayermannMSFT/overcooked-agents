@@ -71,6 +71,7 @@ export class World {
   resize() {
     const w = window.innerWidth;
     const h = window.innerHeight;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.quality === 'low' ? 1 : 2));
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / Math.max(1, h);
     this.fitCamera();

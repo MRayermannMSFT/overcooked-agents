@@ -13,6 +13,17 @@ export function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+/**
+ * Session name to show. Copilot often names sessions after the first prompt, so in privacy mode
+ * we fall back to the repository name (or a neutral chef number).
+ */
+export function chefName(session, settings) {
+  if (!session) return 'Chef';
+  if (!settings?.privacy) return session.title;
+  const repo = session.repo ? session.repo.split('/').pop() : '';
+  return repo || `Chef ${String(session.id || '').slice(0, 4)}`;
+}
+
 /** HTML elements pinned to 3D positions: station labels, progress bars, fire alerts, chef tags and bubbles. */
 export class Overlay {
   constructor(root, { world, kitchen, director, settings }) {
@@ -128,7 +139,8 @@ export class Overlay {
         rec.node.style.setProperty('--chef', color);
         rec.last.color = color;
       }
-      const name = e.sous ? `↳ ${e.name}` : e.name;
+      const session = this.director.sessions.get(e.sessionId);
+      const name = e.sous ? `↳ ${this.settings.privacy ? 'Sous-chef' : e.name}` : chefName(session, this.settings) || e.name;
       if (rec.last.name !== name) {
         rec.name.textContent = name;
         rec.last.name = name;
@@ -139,7 +151,7 @@ export class Overlay {
         rec.icon.innerHTML = act.station ? stationIconSvg(act.station, 16) : '';
         rec.last.icon = iconKey;
       }
-      rec.tag.title = act.text;
+      rec.tag.title = this.settings.privacy && act.station ? STATION_BY_ID[act.station].sdlc : act.text;
 
       const chatter = this.settings.chatter && !this.settings.privacy;
       const bubbleText = chatter && e.say && talkers.has(e.key) ? e.say.text : '';

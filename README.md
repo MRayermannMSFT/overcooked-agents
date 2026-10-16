@@ -148,6 +148,7 @@ Keyboard: `M` menu · `B` brigade · `Esc` close panels and deselect.
 ## Privacy & security
 
 - The server reads `~/.copilot/session-state/*/events.jsonl` and `workspace.yaml` **read-only** and keeps everything in memory.
+- To tell whether a session's process is still running (rather than a crashed one whose PID was reused), it looks up process start times: PowerShell `Get-Process` on Windows, `/proc` on Linux, `ps` on macOS.
 - It binds to `127.0.0.1` by default, rejects requests whose `Host` header isn't local (DNS-rebinding protection), sends a strict Content-Security-Policy, and only serves files from `public/`.
 - Nothing is sent anywhere: the page loads no external resources.
 - If you bind to another interface with `--host`, anyone who can reach that port can see your prompts.

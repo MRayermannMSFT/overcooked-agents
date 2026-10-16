@@ -53,9 +53,45 @@ async function waitFor(fn, ms = 4000) {
   }
 }
 
+/** Fake process start-time lookup: every process started a minute ago (no PowerShell/ps needed in tests). */
+const startedAMinuteAgo = async (pids) => new Map(pids.map((p) => [p, Date.now() - 60_000]));
+
 function makeWatcher(root, kitchen, extra = {}) {
-  return new CopilotWatcher({ stateDir: root, kitchen, since: Date.now() - 86400e3, pollMs: 30, scanMs: 60, ...extra });
+  return new CopilotWatcher({ stateDir: root, kitchen, since: Date.now() - 86400e3, pollMs: 30, scanMs: 60, startTimes: startedAMinuteAgo, ...extra });
 }
+
+test('watcher: a crashed session whose PID was reused by another process stays out of the kitchen', async (t) => {
+  const CRASHED = '33333333-2222-3333-4444-555555555555';
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kitchen-state-'));
+  tmpDirs.push(root);
+  const dir = path.join(root, CRASHED);
+  fs.mkdirSync(dir);
+  // Sixteen days ago a session asked the user a question, then its process crashed without a shutdown event.
+  const past = new Date(Date.now() - 16 * 86400e3);
+  const old = { timestamp: past.toISOString() };
+  fs.writeFileSync(
+    path.join(dir, 'events.jsonl'),
+    line('session.start', {}, old) + line('user.message', { content: 'old', interactionId: 'o' }, old) +
+      line('assistant.turn_start', { interactionId: 'o' }, old) + line('tool.execution_start', { toolCallId: 'q', toolName: 'ask_user', arguments: {} }, old),
+  );
+  // Its lock names a PID that is running right now (ours) — but the lock predates that process.
+  fs.writeFileSync(path.join(dir, `inuse.${process.pid}.lock`), String(process.pid));
+  for (const f of ['events.jsonl', `inuse.${process.pid}.lock`]) fs.utimesSync(path.join(dir, f), past, past);
+
+  const kitchen = new KitchenState();
+  const watcher = makeWatcher(root, kitchen);
+  t.after(() => watcher.stop());
+  await watcher.start();
+  assert.ok(!kitchen.has(CRASHED), 'a recycled PID is not mistaken for the session’s process');
+
+  // Control: if that process had really started before the lock was written, it's an idle session waiting on you.
+  const kitchen2 = new KitchenState();
+  const watcher2 = makeWatcher(root, kitchen2, { startTimes: async (pids) => new Map(pids.map((p) => [p, past.getTime() - 60_000])) });
+  t.after(() => watcher2.stop());
+  await watcher2.start();
+  assert.ok(kitchen2.has(CRASHED));
+  assert.equal(kitchen2.get(CRASHED).status, 'waiting');
+});
 
 test('watcher: discovers live sessions, replays history, tails new events', async (t) => {
   const { root, dir } = setupStateDir();

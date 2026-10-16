@@ -38,14 +38,14 @@ The Copilot CLI, the GitHub Copilot app (which runs the CLI under the hood) and 
 |---|---|
 | `events.jsonl` | Append-only event log; one JSON object per line |
 | `workspace.yaml` | Session name, summary, repository, branch, cwd, client (`github/autopilot` = app, `github/cli` = CLI) |
-| `inuse.<pid>.lock` | Present while a Copilot process has the session open |
+| `inuse.<pid>.lock` | Written when a Copilot process opens the session; removed on a clean exit, left behind after a crash |
 
 `CopilotWatcher` (`server/watcher.js`):
 
 1. **Scans** the folder every 3 s. A session is loaded if its `events.jsonl` changed since `--since` (default: midnight) or its lock file names a live process. Older sessions are remembered by mtime and loaded the moment they change (e.g. a resumed session).
 2. **Replays** a newly tracked file (up to the last 64 MB) silently to rebuild state — tickets, stats, current tool — without animating history.
 3. **Polls** tracked files every 500 ms. `FileTailer` reads only the new bytes, keeps partial trailing lines (and split UTF-8 characters) for the next read, and restarts if a file shrinks.
-4. **Checks liveness**: a chef is on shift while a lock file's PID is alive (`process.kill(pid, 0)`), or for a 5-minute grace period after its last event. When the process is gone, in-flight tools are cleared and the chef clocks out.
+4. **Checks liveness** (`server/liveness.js`): a chef is on shift while its session has a *live* lock, or for a 5-minute grace period after its last event. A lock is live only if a process with that PID exists **and** started before the lock was written. A crashed process leaves its lock behind and the OS eventually hands the PID to some unrelated program, which `process.kill(pid, 0)` alone can't tell apart. Start times come from one batched lookup per new lock (PowerShell `Get-Process` on Windows, `/proc` on Linux, `ps` on macOS) and are cached; if they can't be looked up, the watcher falls back to trusting the PID. When the process is gone, in-flight tools and open tickets are cleared and the chef clocks out.
 
 Events are filtered before parsing: Copilot writes `{"type":"…` first, so `wantsLine()` skips the large lines the kitchen doesn't need (model snapshots, hooks, usage records) without `JSON.parse`. A typical startup (8 sessions, tens of MB) takes ~0.4 s.
 
@@ -143,8 +143,9 @@ npm test
 
 - `test/stations.test.js` — the tool and shell classifier (100+ real-world commands).
 - `test/normalize.test.js` — the session state machine: full orders, fires, background shells, sub-agents, waiting, aborts, liveness, stats windows.
-- `test/server-units.test.js` — tailer (partial lines, split UTF-8, truncation), YAML, CLI options, host checks, path traversal.
-- `test/integration.test.js` — a real watcher + HTTP server against a temp state folder: discovery, tailing, renames, clock-out, SSE snapshot/update.
+- `test/server-units.test.js` — tailer (partial lines, split UTF-8, truncation), YAML, CLI options, host checks, path traversal, browser launch.
+- `test/liveness.test.js` — lock liveness: recycled PIDs, caching, fallback, and start-time parsing for Windows, Linux and macOS (plus a real lookup on the current OS).
+- `test/integration.test.js` — a real watcher + HTTP server against a temp state folder: discovery, tailing, renames, clock-out, crashed sessions with recycled PIDs, SSE snapshot/update.
 - `test/layout.test.js` — every station is in the kitchen and reachable; idle spots don't block stations.
 
 Visual checks use `scripts/shot.js` (headless Edge/Chrome over the DevTools protocol, zero dependencies), which fails on any page error; `npm run screenshots` drives a full demo shift and captures the docs images.

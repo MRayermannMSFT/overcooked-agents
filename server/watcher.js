@@ -3,20 +3,11 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { FileTailer } from './tail.js';
 import { parseFlatYaml, workspaceMeta } from './yaml.js';
+import { LockLiveness, isPidAlive, processStartTimes } from './liveness.js';
 import { wantsLine } from '../public/shared/normalize.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LOCK = /^inuse\.(\d+)\.lock$/;
-
-export function isPidAlive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    return err.code === 'EPERM';
-  }
-}
 
 /**
  * Watches ~/.copilot/session-state for Copilot sessions (used by the Copilot CLI, the GitHub
@@ -39,6 +30,8 @@ export class CopilotWatcher extends EventEmitter {
     graceMs = 5 * 60 * 1000,
     maxReplayBytes = 64 * 1024 * 1024,
     pidAlive = isPidAlive,
+    startTimes = processStartTimes,
+    liveness = new LockLiveness({ pidAlive, startTimes }),
     now = () => Date.now(),
   }) {
     super();
@@ -49,7 +42,7 @@ export class CopilotWatcher extends EventEmitter {
     this.scanMs = scanMs;
     this.graceMs = graceMs;
     this.maxReplayBytes = maxReplayBytes;
-    this.pidAlive = pidAlive;
+    this.liveness = liveness;
     this.now = now;
     this.files = new Map(); // tracked: id -> { id, dir, file, tailer, yamlMtime }
     this.untracked = new Map(); // id -> events.jsonl mtime when last seen
@@ -84,18 +77,26 @@ export class CopilotWatcher extends EventEmitter {
     }
   }
 
-  async lockAlive(dir) {
+  /** The inuse.<pid>.lock files in a session folder, with their write times. */
+  async locksIn(dir) {
     let names;
     try {
       names = await fsp.readdir(dir);
     } catch {
-      return false;
+      return [];
     }
+    const locks = [];
     for (const n of names) {
       const m = LOCK.exec(n);
-      if (m && this.pidAlive(Number(m[1]))) return true;
+      if (!m) continue;
+      try {
+        const st = await fsp.stat(path.join(dir, n));
+        locks.push({ pid: Number(m[1]), mtimeMs: st.mtimeMs });
+      } catch {
+        // removed while we looked
+      }
     }
-    return false;
+    return locks;
   }
 
   async refreshMeta(entry) {
@@ -143,10 +144,9 @@ export class CopilotWatcher extends EventEmitter {
     return entry;
   }
 
-  async refreshLiveness(entry) {
+  refreshLiveness(entry, lockAlive) {
     const tracker = this.kitchen.get(entry.id);
-    const lock = await this.lockAlive(entry.dir);
-    const alive = lock || (!tracker.ended && this.now() - tracker.lastEventAt < this.graceMs);
+    const alive = lockAlive || (!tracker.ended && this.now() - tracker.lastEventAt < this.graceMs);
     return tracker.setAlive(alive);
   }
 
@@ -165,6 +165,7 @@ export class CopilotWatcher extends EventEmitter {
     const changed = new Set();
     const fx = initial ? null : [];
     const present = new Set();
+    const candidates = [];
 
     for (const ent of entries) {
       if (!ent.isDirectory() || !UUID.test(ent.name)) continue;
@@ -180,15 +181,26 @@ export class CopilotWatcher extends EventEmitter {
         continue;
       }
       const seen = this.untracked.get(id);
-      let shouldTrack;
-      if (seen === undefined) shouldTrack = st.mtimeMs >= this.since || (await this.lockAlive(dir));
-      else shouldTrack = st.mtimeMs !== seen; // an old session just got new activity (e.g. resumed)
-      if (!shouldTrack) {
-        this.untracked.set(id, st.mtimeMs);
+      // New to us: track it if it was active in the window, or if a Copilot process still has it open.
+      if (seen === undefined) candidates.push({ id, dir, file, mtimeMs: st.mtimeMs, needsLock: st.mtimeMs < this.since });
+      // An old session that just got new activity (e.g. resumed).
+      else if (st.mtimeMs !== seen) candidates.push({ id, dir, file, mtimeMs: st.mtimeMs, needsLock: false });
+    }
+
+    // Read every relevant lock first so process start times are looked up in one batch.
+    const locks = new Map();
+    for (const c of candidates) locks.set(c.id, await this.locksIn(c.dir));
+    for (const [id, entry] of this.files) if (present.has(id)) locks.set(id, await this.locksIn(entry.dir));
+    const verdicts = await this.liveness.check([...locks.values()].flat());
+    const lockAlive = (id) => (locks.get(id) || []).some((l) => verdicts.get(LockLiveness.key(l)));
+
+    for (const c of candidates) {
+      if (c.needsLock && !lockAlive(c.id)) {
+        this.untracked.set(c.id, c.mtimeMs);
         continue;
       }
-      await this.track(id, dir, file, fx);
-      changed.add(id);
+      await this.track(c.id, c.dir, c.file, fx);
+      changed.add(c.id);
     }
 
     for (const [id, entry] of this.files) {
@@ -204,7 +216,7 @@ export class CopilotWatcher extends EventEmitter {
         continue;
       }
       if (await this.refreshMeta(entry)) changed.add(id);
-      if (await this.refreshLiveness(entry)) changed.add(id);
+      if (this.refreshLiveness(entry, lockAlive(id))) changed.add(id);
     }
 
     if (!initial && (changed.size || fx.length)) this.emit('update', { changed: [...changed], fx });

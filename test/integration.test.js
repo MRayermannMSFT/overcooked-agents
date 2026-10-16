@@ -226,3 +226,65 @@ test('server: health, state, SSE stream, static files and security checks', asyn
   assert.equal(upd.data.sessions[0].orders[0].stations[0], 'code');
   res.destroy();
 });
+
+test('server: idle sessions expire from SSE and reappear when resumed', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kitchen-state-'));
+  tmpDirs.push(root);
+  const dir = path.join(root, SID);
+  fs.mkdirSync(dir);
+  const staleAt = Date.now() - 2 * 3600e3;
+  const stale = { timestamp: new Date(staleAt).toISOString() };
+  fs.writeFileSync(
+    path.join(dir, 'events.jsonl'),
+    line('session.start', { context: { repository: 'me/stale' } }, stale) +
+      line('assistant.turn_end', {}, stale),
+  );
+  fs.writeFileSync(path.join(dir, `inuse.${process.pid}.lock`), String(process.pid));
+
+  const idleMs = 60 * 60e3;
+  const kitchen = new KitchenState({ idleMs });
+  const watcher = makeWatcher(root, kitchen, {
+    startTimes: async (pids) => new Map(pids.map((pid) => [pid, staleAt - 60_000])),
+  });
+  await watcher.start();
+  kitchen.get(SID).lastEventAt = Date.now();
+  const server = createKitchenServer({ kitchen, watcher, host: '127.0.0.1', info: { mode: 'live' }, tickMs: 10_000 });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  let stream;
+  t.after(async () => {
+    stream?.destroy();
+    watcher.stop();
+    await server.stop();
+  });
+
+  const events = [];
+  stream = await new Promise((resolve) => http.get({ port, path: '/api/stream' }, resolve));
+  let buf = '';
+  stream.on('data', (chunk) => {
+    buf += chunk;
+    let i;
+    while ((i = buf.indexOf('\n\n')) >= 0) {
+      const block = buf.slice(0, i);
+      buf = buf.slice(i + 2);
+      const event = /^event: (.+)$/m.exec(block)?.[1];
+      const data = /^data: (.+)$/m.exec(block)?.[1];
+      if (event && data) events.push({ event, data: JSON.parse(data) });
+    }
+  });
+  const snapshot = await waitFor(() => events.find((event) => event.event === 'snapshot'));
+  assert.ok(snapshot.data.sessions.some((session) => session.id === SID));
+
+  kitchen.get(SID).lastEventAt = Date.now() - idleMs - 1;
+  server.pushUpdate();
+  const expired = await waitFor(() => events.find((event) => event.event === 'update' && event.data.removed.includes(SID)));
+  assert.deepEqual(expired.data.sessions, []);
+  const hidden = JSON.parse((await request(port, '/api/state')).body);
+  assert.ok(!hidden.sessions.some((session) => session.id === SID), 'stale idle chef leaves the kitchen');
+
+  fs.appendFileSync(path.join(dir, 'events.jsonl'), line('session.resume', { context: { repository: 'me/stale' } }));
+  const returned = await waitFor(() => events.find((event) =>
+    event.event === 'update' && event.data.sessions.some((session) => session.id === SID)));
+  const resumed = returned.data.sessions.find((session) => session.id === SID);
+  assert.equal(resumed.status, 'idle');
+});

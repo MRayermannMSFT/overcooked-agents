@@ -217,16 +217,19 @@ test('titles fall back from name → summary → repo → cwd → id', () => {
 });
 
 test('KitchenState visibility and totals', () => {
-  const k = new KitchenState({ recentMs: 60_000 });
+  const k = new KitchenState({ recentMs: 60_000, idleMs: 120_000 });
   const a = k.get('a');
   a.setAlive(true);
-  a.lastEventAt = 0;
+  a.lastEventAt = 950_000;
   const b = k.get('b');
   b.setAlive(false);
   b.lastEventAt = 1_000_000;
   const c = k.get('c');
   c.setAlive(false);
   c.lastEventAt = 0;
+  const d = k.get('d');
+  d.setAlive(true);
+  d.lastEventAt = 0;
   const vis = k.visible(1_030_000).map((s) => s.id).sort();
   assert.deepEqual(vis, ['a', 'b']);
   a.stats.coins = 30;
@@ -234,6 +237,46 @@ test('KitchenState visibility and totals', () => {
   assert.equal(k.totals().coins, 0, 'coins never go negative');
   const snap = k.snapshot(1_030_000);
   assert.equal(snap.sessions.length, 2);
+});
+
+test('KitchenState keeps active work visible and can disable idle expiry', () => {
+  const now = 1_000_000;
+  const active = new KitchenState({ idleMs: 60_000 });
+  const working = active.get('working');
+  working.setAlive(true);
+  working.lastEventAt = 0;
+  working.ingest({
+    type: 'tool.execution_start',
+    id: 'tool',
+    timestamp: new Date(0).toISOString(),
+    data: { toolCallId: 'tool', toolName: 'view', arguments: {} },
+  });
+  assert.equal(working.status, 'working');
+  assert.equal(active.isVisible(working, now), true);
+
+  const thinking = active.get('thinking');
+  thinking.setAlive(true);
+  thinking.ingest({ type: 'assistant.turn_start', id: 'turn', timestamp: new Date(0).toISOString(), data: {} });
+  assert.equal(thinking.status, 'thinking');
+  assert.equal(active.isVisible(thinking, now), true);
+
+  const waiting = active.get('waiting');
+  waiting.setAlive(true);
+  waiting.ingest({
+    type: 'permission.requested',
+    id: 'permission',
+    timestamp: new Date(0).toISOString(),
+    data: { requestId: 'permission' },
+  });
+  assert.equal(waiting.status, 'waiting');
+  assert.equal(active.isVisible(waiting, now), true);
+
+  const unlimited = new KitchenState({ idleMs: 0 });
+  const idle = unlimited.get('idle');
+  idle.setAlive(true);
+  idle.lastEventAt = 0;
+  assert.equal(idle.status, 'idle');
+  assert.equal(unlimited.isVisible(idle, now), true);
 });
 
 test('abort releases in-flight tools with cancelled tool-ends (so chefs never get stuck)', () => {

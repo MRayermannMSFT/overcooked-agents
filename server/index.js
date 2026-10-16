@@ -31,7 +31,7 @@ async function main() {
     console.error(err.message);
     process.exit(2);
   }
-  const kitchen = new KitchenState({ countFrom: since, recentMs: opts.recent * 60e3 });
+  const kitchen = new KitchenState({ countFrom: since, recentMs: opts.recent * 60e3, idleMs: opts.idle * 60e3 });
   const watcher = new CopilotWatcher({ stateDir, kitchen, since, pollMs: opts.poll });
   watcher.on('warn', (msg) => console.warn(`⚠️  ${msg}`));
   watcher.on('error', (err) => console.error('watcher error:', err?.message || err));

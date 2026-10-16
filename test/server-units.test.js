@@ -98,13 +98,15 @@ test('parseFlatYaml + workspaceMeta read Copilot workspace.yaml', () => {
 
 test('config: args, --since, state dir', () => {
   assert.deepEqual(
-    { ...parseArgs(['--port', '9000', '--open', '--since', '2h'], {}) },
-    { port: 9000, host: '127.0.0.1', open: true, demo: false, since: '2h', recent: 20, poll: 500, stateDir: null, help: false },
+    { ...parseArgs(['--port', '9000', '--open', '--since', '2h', '--idle', '90'], {}) },
+    { port: 9000, host: '127.0.0.1', open: true, demo: false, since: '2h', recent: 20, idle: 90, poll: 500, stateDir: null, help: false },
   );
   assert.equal(parseArgs([], { PORT: '8123' }).port, 8123);
+  assert.equal(parseArgs(['--idle', '0'], {}).idle, 0);
   assert.throws(() => parseArgs(['--bogus']), /Unknown option/);
   assert.throws(() => parseArgs(['--port']), /Missing value/);
   assert.throws(() => parseArgs(['--port', 'abc']), /Invalid --port/);
+  assert.throws(() => parseArgs(['--idle', '-1']), /Invalid --idle/);
   const now = new Date('2026-10-14T15:30:00');
   assert.equal(parseSince('all', now), 0);
   assert.equal(parseSince('today', now), new Date('2026-10-14T00:00:00').getTime());

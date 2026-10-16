@@ -129,8 +129,11 @@ node server/index.js [options]
                       or ~/.copilot/session-state)
   --since <when>      Count coins/orders since: today (default), all, 30m, 4h, 2d, or a date
   --recent <minutes>  Keep recently finished sessions in the roster this long (default 20)
+  --idle <minutes>    Hide live idle sessions after no activity this long (default 60; 0 disables)
   --poll <ms>         How often to check for new events (default 500)
 ```
+
+Live sessions that have been idle for more than 60 minutes are hidden by default, which keeps abandoned app automations and lingering runtime processes from filling the kitchen forever. Active work and sessions waiting for input remain visible regardless of age, and a hidden session reappears as soon as it resumes. Use `--idle 0` to keep every live idle session visible.
 
 URL parameters:
 

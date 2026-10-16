@@ -14,6 +14,7 @@ Options:
                       or ~/.copilot/session-state)
   --since <when>      Count coins/orders since: today (default), all, 30m, 4h, 2d, or a date
   --recent <minutes>  Keep recently finished sessions in the roster this long (default 20)
+  --idle <minutes>    Hide live idle sessions after no activity this long (default 60; 0 disables)
   --poll <ms>         How often to check for new events (default 500)
   -h, --help          Show this help
 `;
@@ -26,6 +27,7 @@ export function parseArgs(argv, env = process.env) {
     demo: false,
     since: 'today',
     recent: 20,
+    idle: 60,
     poll: 500,
     stateDir: null,
     help: false,
@@ -45,6 +47,7 @@ export function parseArgs(argv, env = process.env) {
       case '--state-dir': opts.stateDir = next(); break;
       case '--since': opts.since = next(); break;
       case '--recent': opts.recent = Number(next()); break;
+      case '--idle': opts.idle = Number(next()); break;
       case '--poll': opts.poll = Number(next()); break;
       case '-h': case '--help': opts.help = true; break;
       default: throw new Error(`Unknown option: ${a}`);
@@ -52,6 +55,7 @@ export function parseArgs(argv, env = process.env) {
   }
   if (!Number.isInteger(opts.port) || opts.port < 0 || opts.port > 65535) throw new Error('Invalid --port');
   if (!(opts.recent >= 0)) throw new Error('Invalid --recent');
+  if (!(opts.idle >= 0)) throw new Error('Invalid --idle');
   if (!(opts.poll >= 50)) throw new Error('Invalid --poll (minimum 50ms)');
   return opts;
 }

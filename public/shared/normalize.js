@@ -500,10 +500,11 @@ export class SessionTracker {
 
 /** All sessions on the machine, plus the visibility rules for who is "in the kitchen". */
 export class KitchenState {
-  constructor({ countFrom = 0, recentMs = 20 * 60 * 1000 } = {}) {
+  constructor({ countFrom = 0, recentMs = 20 * 60 * 1000, idleMs = 60 * 60 * 1000 } = {}) {
     this.sessions = new Map();
     this.countFrom = countFrom;
     this.recentMs = recentMs;
+    this.idleMs = idleMs;
   }
 
   get(id) {
@@ -523,9 +524,12 @@ export class KitchenState {
     return this.get(id).ingest(event);
   }
 
-  /** Sessions worth sending to the browser: anyone not offline, or offline but recently active. */
+  /** Sessions worth sending to the browser: active work, recent clock-outs, and recent idle chefs. */
   isVisible(s, now = Date.now()) {
-    return s.status !== 'offline' || now - s.lastEventAt < this.recentMs;
+    const age = now - s.lastEventAt;
+    if (s.status === 'offline') return age < this.recentMs;
+    if (s.status === 'idle' && this.idleMs > 0) return age < this.idleMs;
+    return true;
   }
 
   visible(now = Date.now()) {
